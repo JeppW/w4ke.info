@@ -1,6 +1,5 @@
 ---
-title: Jeppe's blog
+title: Jeppe's place
 ---
 
-## Testing
-Testing.
+This is where I post writings about hacking and technology.
