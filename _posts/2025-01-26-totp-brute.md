@@ -219,7 +219,7 @@ const debouncedUpdatePlot = debounce(updatePlot);
 
 noUiSlider.create(vSlider, {
     start: [10],
-    range: { min: 1, max: 70 },
+    range: { min: 1, max: 50 },
     step: 1
 });
 
@@ -231,7 +231,7 @@ noUiSlider.create(LSlider, {
 
 noUiSlider.create(lambdaSlider, {
     start: [1],
-    range: { min: 0, max: 10 },
+    range: { min: 0, max: 8 },
     step: 1
 });
 
