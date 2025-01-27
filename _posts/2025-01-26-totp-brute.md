@@ -61,7 +61,7 @@ First of all, I will argue that a *hypergeometric* distribution constitutes a be
 In this context, a *"random draw"* is a guess, the *"specified feature"* is the guess being a valid code, and *"replacement"* refers to whether or not we might submit the same guess multiple times. Clearly, any reasonable attacker would not repeat incorrect guesses within a single time step, as that would be guaranteed to fail. Let us therefore agree that the *without replacement* option makes more sense.
 
 ### The simplest case: $$ \lambda = 0 $$
-Now we're ready to consider the simple case where $$ \lambda = 0 $$. Within each individual time step, we've agreed that the number of correct guesses $$ X $$ follows a hypergeometric distribution.
+Now we're ready to consider the simple case where $$ \lambda = 0 $$. Within each individual time step, we've agreed that the number of correct guesses $$ X $$ follows a hypergeometric distribution. Since there is no grace period and thus only one valid code, we set $$ K = 1 $$.
 
 $$ X \sim Hypergeometric(N=10^D,\ K=1,\ n=vL) $$
 
@@ -69,9 +69,9 @@ Consequently, its [PMF](https://en.wikipedia.org/wiki/Probability_mass_function)
 
 $$ Pr(X = k) = \frac{\binom{K}{k} \binom{N-K}{n-k}}{\binom{N}{n}} $$
 
-Remember, we only need to guess correctly *once*; anything other than $$ X = 0 $$ correct guesses is considered a success. The probability of zero correct guesses (i.e. a *failure*) can be expressed as:
+Remember, we only need to guess correctly *once*; anything other than $$ X = 0 $$ correct guesses is considered a success. The probability of zero correct guesses (i.e. a *failure*) simplifies nicely:
 
-$$ Pr(f) = Pr(X = 0) = \frac{\binom{K}{0} \binom{N-K}{n-0}}{\binom{N}{n}} = \frac{ \binom{N-K}{n}}{\binom{N}{n}} = \frac{ \binom{10^D - 1}{v L}}{\binom{10^D}{v L}}$$
+$$ Pr(f) = Pr(X = 0) = \frac{\binom{K}{0} \binom{N-K}{n-0}}{\binom{N}{n}} = \frac{ \binom{N-K}{n}}{\binom{N}{n}} = \frac{ \binom{10^D - 1}{v L}}{\binom{10^D}{v L}} = \frac{10^D - v L}{10^D} $$
 
 $$ Pr(f) $$ represents the probability of failure during a *single* time step. Now, what happens when our brute-force attack spans multiple time steps? The probability of overall failure $$ Pr(F) $$ is equivalent to the probability of failing every individual time step. As such, we can describe the probability of failure after a $$ T $$-second attack as the probability of failing $$ T / L $$ consecutive time steps.
 
@@ -88,7 +88,7 @@ It is tempting to conclude that in the general case where $$ \lambda $$ can take
 
 Consider what happens once we enter a new time step during our attack: a new primary code is generated, the previous one becomes a grace period code, and the oldest grace period code expires. At this point, *any code* could be valid, but some codes are less probable than others. Specifically, our failed attempts from the previous time step might match the new primary code, but they will certainly not be accepted as grace period codes. For this reason, we should not repeat guesses from the last $$ \lambda $$ time steps, as they are less likely to result in a success. By applying this intuitive optimization strategy, we can slightly improve our chances of success.
 
-So how do we express this improvement mathematically? Instead of considering $$ 1 + \lambda $$ codes to be valid simultaneously, we consider the probability of guessing each valid code individually. For each grace period code, we've effectively reduced the size of the OTP search space by $$ n = v L $$ guesses for each time step in which the code has been active. As such, we can express $$ Pr(f) $$ as a product of $$ \lambda + 1 $$ differently parameterized hypergeometric probabilities. We introduce $$ N_i = N - i v L $$ to denote the reduced search space size for a code that has been active for $$ i $$ time steps. 
+So how do we express this improvement mathematically? Instead of considering $$ 1 + \lambda $$ codes to be valid simultaneously, we consider the probability of guessing each valid code individually. For each grace period code, we've effectively reduced the size of the OTP search space by $$ n = v L $$ guesses for each time step in which the code has been active. As such, we can express $$ Pr(f) $$ as a product of $$ \lambda + 1 $$ differently parameterized hypergeometric probabilities. We introduce $$ N_i = N - i v L $$ to denote the size of the reduced search space for a code that has been active for $$ i $$ time steps. 
 
 $$
 \begin{aligned}
@@ -131,46 +131,40 @@ Now that we have related the attack duration to the probability of success, let'
 </div>
 
 <script>
-let D = 6n;
-let v = 10n;
-let L = 30n;
-let lambda = 1n;
-
-function choose(n, k) {
-  if (k > n) return 0n;
-  if (k > n / 2n) k = n - k;
-  let result = 1n;
-  for (let i = 1n; i <= k; i++) {
-    result *= n - (k - i);
-    result /= i;
-  }
-  return result;
-}
+let D = 6;
+let v = 10;
+let L = 30;
+let lambda = 1;
 
 function probByTime(T) {
-    let otpSpaceSize = 10n ** D;
-    let vL = L * v;
-    
-    let result = 1n;
+    if (T == 0) return 0;
 
-    for (let i = 0n; i <= lambda; i++) {
+    let otpSpaceSize = 10 ** D;
+    let vL = v * L;
+    
+    let result = 1;
+
+    for (let i = 0; i <= lambda; i++) {
         let subtractable = i * vL;
 
-        let a = choose(otpSpaceSize - subtractable - 1n, vL);
-        let b = choose(otpSpaceSize - subtractable, vL);
+        let Ni = otpSpaceSize - subtractable;
 
-        let subresult = a * (10n ** 15n) / b;
+        if (Ni <= 0 || vL > Ni) {
+            // if the entire space is covered, the probability of success is 100%
+            return 1;
+        }
+
+        let subresult = 1 - (vL / Ni);
+
         result *= subresult;
     }
 
-    let preciseResult = Number(result) / (10 ** (15 * Number(lambda) + 15));
-
-    return 1 - Math.pow(preciseResult, Number(T) / Number(L));
+    return 1 - Math.pow(result, T / L);
 }
 
 function distribution() {
-    const x = Array.from({length: 3*24+1}, (_, i) => i);
-    const y = x.map(xVal => probByTime(BigInt(60*60*xVal)));
+    const x = Array.from({length: 4*3*24+1}, (_, i) => i/4);
+    const y = x.map(xVal => probByTime(60*60*xVal));
     return {x, y};
 }
 
@@ -207,25 +201,15 @@ function updateLabels() {
     document.getElementById('D-label').textContent = `D (number of digits): ${D}`;
 }
 
-function debounce(func, timeout = 200) {
-    let timer;
-    return (...args) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => func.apply(this, args), timeout);
-    };
-}
-
-const debouncedUpdatePlot = debounce(updatePlot);
-
 noUiSlider.create(vSlider, {
     start: [10],
-    range: { min: 1, max: 50 },
+    range: { min: 1, max: 100 },
     step: 1
 });
 
 noUiSlider.create(LSlider, {
     start: [30],
-    range: { min: 10, max: 90 },
+    range: { min: 10, max: 15*60 },
     step: 5
 });
 
@@ -242,27 +226,27 @@ noUiSlider.create(DSlider, {
 });
 
 vSlider.noUiSlider.on('update', function(values) {
-    v = BigInt(Math.round(values[0]));
+    v = Math.round(values[0]);
     updateLabels();
-    debouncedUpdatePlot();
+    updatePlot();
 });
 
 LSlider.noUiSlider.on('update', function(values) {
-    L = BigInt(Math.round(values[0]));
+    L = Math.round(values[0]);
     updateLabels();
-    debouncedUpdatePlot();
+    updatePlot();
 });
 
 lambdaSlider.noUiSlider.on('update', function(values) {
-    lambda = BigInt(Math.round(values[0]));
+    lambda = Math.round(values[0]);
     updateLabels();
-    debouncedUpdatePlot();
+    updatePlot();
 });
 
 DSlider.noUiSlider.on('update', function(values) {
-    D = BigInt(Math.round(values[0]));
+    D = Math.round(values[0]);
     updateLabels();
-    debouncedUpdatePlot();
+    updatePlot();
 });
 
 updateLabels();
