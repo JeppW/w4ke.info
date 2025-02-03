@@ -38,18 +38,18 @@ date: 2025-01-26
 }
 </style>
 
-It is hardly controversial to argue in 2025 that 6-digit time-based one-time passwords (TOTPs) are susceptible to brute-force attacks if not protected by appropriate rate-limiting countermeasures. Thankfully, this seems to be a settled debate, and most implementations do enforce some kind of authentication throttling. Recently, I was searching for a precise mathematical breakdown of this susceptibility, only to find that none seems to exist - only simplified descriptions that do not properly capture the subtleties of TOTPs. This lack of precision bugged me enough to do something about it.
+It is hardly controversial to argue in 2025 that 6-digit time-based one-time passwords (TOTPs) are susceptible to brute-force attacks if not protected by appropriate rate-limiting countermeasures. Thankfully, this seems to be a settled debate, and most implementations do enforce some kind of throttling. I was recently searching for a precise mathematical breakdown of this susceptibility, and I was surprised to find that none seems to exist - only simplified descriptions that do not properly capture the subtleties of TOTPs. This lack of precision bugged me enough to do something about it.
 
 What follows is my attempt to fill that gap. In this post, we'll look into the mathematics of TOTP brute-force attacks and develop an accurate description, skipping the shortcuts. Finally, we will take some time to discuss the importance of the various TOTP configuration parameters.
 
 ## Brief introduction to TOTPs
 Before we dive into the math, let us first introduce TOTP and define some relevant terminology. If you've ever ~~been forced to enable~~ responsibly chosen to enable 2FA, you're probably already familiar with the principle of TOTPs from apps like Google Authenticator. The basic idea is simple: the 2FA app generates a new 6-digit code every 30 seconds (each *"time step"*) using the current time and a shared secret usually provided in a QR code during 2FA setup. To prove your identity, you (the *"prover"*) submit the code and the server (the *"validator"*) independently generates the same code and verifies that they match. Codes do not need to be remembered, they can't be used more than once, and all codes are equally likely to be generated. Lovely!
 
-Since the current time is used in code generation, this scheme relies on the prover and validator staying reasonably time-synchronized. To account for potential clock drift or delays caused by slow networks, TOTP validators can choose to accept a number of the most recently expired codes (*"grace period codes"*) in addition to the correct code (the "*primary code"*). This optional grace period is intended to ensure that valid authentication attempts aren't unfairly rejected due to minor synchronization issues.
+Since the current time is used in code generation, this scheme relies on the prover and validator staying reasonably time-synchronized. To account for potential clock drift and network latency, TOTP validators can choose to accept a number of the most recently expired codes (*"grace period codes"*) in addition to the correct code (the "*primary code"*). This optional grace period is intended to ensure that valid authentication attempts aren't unfairly rejected due to minor synchronization issues.
 
 There are three configuration options of interest to our brute-force analysis purposes: the number of OTP digits $$ D $$, the time step duration $$ L $$, and the number of grace period codes $$ \lambda $$. We can then describe a TOTP validator's configuration in completeness with the tuple $$ (D, L, \lambda) $$. 
 
-Let us now take a look at these configuration parameters from an attacker's perspective. First of all, we can conclude that the OTP code space has a relatively small size of $$ N = 10^D $$. At any given time, $$ 1 + \lambda $$ of these codes are acceptable to the validator, and during each time step, we can attempt a total of $$ n = v \cdot L $$ guesses, where $$ v $$ is our number of attempts per second. 
+Let us now take a look at these configuration parameters from an attacker's perspective. First of all, we can conclude that the OTP space has a relatively small size of $$ N = 10^D $$. At any given time, $$ 1 + \lambda $$ of these codes are acceptable to the validator, and during each time step, we can attempt a total of $$ n = v \cdot L $$ guesses, where $$ v $$ is our number of attempts per second.
 
 ## Brute-force mathematics
 Other authors ([Luke Plant, 2019](https://lukeplant.me.uk/blog/posts/6-digit-otp-for-two-factor-auth-is-brute-forceable-in-3-days/) and [Michael Fincham, 2021](https://pulsesecurity.co.nz/articles/totp-bruting)) have previously used a binomial distribution to model the probability of a successful brute-force attack against TOTP validators. This is a close approximation, but it suffers from certain inaccuracies. In this section, I will attempt to derive a more exact description.
@@ -77,11 +77,11 @@ $$ Pr(f) $$ represents the probability of failure during a *single* time step. N
 
 $$ Pr(F) = {Pr(f)}^{T/L} $$
 
-Conversely, the probability of success must then be:
+Conversely, the probability of overall success must then be:
 
 $$ Pr(S) = 1 - Pr(F) $$
 
-This is a complete description of the probability of success in the simple case where $$ \lambda = 0 $$. As we'll see in the next section, the general case is a bit more convoluted.
+This is a complete description of the success probability in the simple case where $$ \lambda = 0 $$. As we'll see in the next section, the general case is a bit more convoluted.
 
 ### The general case
 It is tempting to conclude that in the general case where $$ \lambda $$ can take on a non-zero value, we can adjust our model simply by setting $$ K = 1 + \lambda $$. Unfortunately, it's not quite that simple. 
@@ -97,9 +97,9 @@ Pr(f) &=  Pr(X = 0 \mid N_0) \cdot Pr(X = 0 \mid N_1) \cdots Pr(X = 0 \mid N_{\l
 \end{aligned}
 $$
 
-Of course, this expression is only valid once the attack has been ongoing for at least $$ \lambda $$ time steps. Before that, we have not yet collected the necessary information by guessing incorrectly. For simplicity, we will ignore this *"slow start"* as its effect is negligible and needlessly notationally complicated.
+Of course, this expression is only valid once the attack has been ongoing for at least $$ \lambda $$ time steps. Before that, we have not yet collected the necessary information by guessing incorrectly and we can therefore not reap the benefits of a reduced search space. For simplicity, we will ignore this *"slow start"* as its effect is negligible and needlessly notationally complicated.
 
-Finally, the probability of overall failure after $$ T $$ seconds can be expressed by:
+As in the simple case, the probability of failure (and success) after $$ T $$ seconds can be expressed as:
 
 $$ Pr(F) = {Pr(f)}^{T/L} $$
 
@@ -257,9 +257,9 @@ So what conclusions can we draw from this mathematical venture of ours?
 
 To my own personal dismay, the time step duration seems to carry very little weight. This unfortunately means that the simplified binomial model employed by other authors is almost indistinguishable from the one we developed in this article. In other words, our careful mathematical analysis turned out to be little more than computationally expensive pedantry. Well, at least now we know.
 
-Unsurprisingly, the grace period parameter $$ \lambda $$ makes a quite significant difference to TOTP bruteforceability. In my humble opinion, $$ \lambda $$ should generally be set to no more than $$ 1 $$ in production systems. It considerably weakens the security of TOTP systems, and the synchronization issues it is supposed to address are presumably quite rare - unless the prover submits their code at the very last second, which I'd wager most users instinctively avoid anyway.
+Unsurprisingly, the grace period parameter $$ \lambda $$ makes a quite significant difference to TOTP bruteforceability. It is my opinion that $$ \lambda $$ should generally be set to no more than $$ 1 $$ in production systems. It considerably weakens the security of TOTP authentication, and the synchronization issues it is supposed to address are presumably quite rare - unless the prover submits their code at the very last second, which I'd wager most users instinctively avoid anyway.
 
-As we'd suspected, 6-digit TOTPs are indeed troublingly bruteforceable; a ~50% chance of success can be obtained in a matter of hours with even a modest request rate of 20-30 requests per second. And with specialized software like [Turbo Intruder](https://portswigger.net/research/turbo-intruder-embracing-the-billion-request-attack), much higher rates can usually be achieved. 
+As we'd suspected, 6-digit TOTPs are indeed troublingly bruteforceable; a ~50% chance of success can be obtained in a matter of hours with even a modest request rate of 20-30 requests per second. And with specialized software like [Turbo Intruder](https://portswigger.net/research/turbo-intruder-embracing-the-billion-request-attack), much higher rates can often be achieved. 
 
-Hopefully, these results are enough to convince any lingering skeptics that TOTP systems should always be accompanied by solid rate-limiting. If not, then I really don't know what will.
+Hopefully, these results are enough to convince any lingering skeptics that TOTP systems should always be accompanied by robust rate-limiting protections.
 
