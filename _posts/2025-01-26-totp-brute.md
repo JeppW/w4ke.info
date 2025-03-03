@@ -47,7 +47,7 @@ Before we dive into the math, let us first introduce TOTP and define some releva
 
 Since the current time is used in code generation, this scheme relies on the prover and validator staying reasonably time-synchronized. To account for potential clock drift and network latency, TOTP validators can choose to accept a number of the most recently expired codes (*"grace period codes"*) in addition to the correct code (the "*primary code"*). This optional grace period is intended to ensure that valid authentication attempts aren't unfairly rejected due to minor synchronization issues.
 
-There are three configuration options of interest to our brute-force analysis purposes: the number of OTP digits $$ D $$, the time step duration $$ L $$, and the number of grace period codes $$ \lambda $$. We can then describe a TOTP validator's configuration in completeness with the tuple $$ (D, L, \lambda) $$. 
+There are then three configuration options of interest to our brute-force analysis purposes: the number of OTP digits $$ D $$, the time step duration $$ L $$, and the number of grace period codes $$ \lambda $$. We can therefore describe a TOTP validator's configuration in completeness with the tuple $$ (D, L, \lambda) $$. 
 
 Let us now take a look at these configuration parameters from an attacker's perspective. First of all, we can conclude that the OTP space has a relatively small size of $$ N = 10^D $$. At any given time, $$ 1 + \lambda $$ of these codes are acceptable to the validator, and during each time step, we can attempt a total of $$ n = v \cdot L $$ guesses, where $$ v $$ is our number of attempts per second.
 
@@ -257,7 +257,7 @@ So what conclusions can we draw from this mathematical venture of ours?
 
 To my own personal dismay, the time step duration seems to carry very little weight. This unfortunately means that the simplified binomial model employed by other authors is almost indistinguishable from the one we developed in this article. In other words, our careful mathematical analysis turned out to be little more than computationally expensive pedantry. Well, at least now we know.
 
-Unsurprisingly, the grace period parameter $$ \lambda $$ makes a quite significant difference to TOTP bruteforceability. It is my opinion that $$ \lambda $$ should generally be set to no more than $$ 1 $$ in production systems. It considerably weakens the security of TOTP authentication, and the synchronization issues it is supposed to address are presumably quite rare - unless the prover submits their code at the very last second, which I'd wager most users instinctively avoid anyway.
+Unsurprisingly, the grace period parameter $$ \lambda $$ makes quite a significant difference to TOTP bruteforceability. It is my opinion that $$ \lambda $$ should generally be set to $$ 0 $$ in production systems, as it considerably weakens the security of TOTP authentication, and the synchronization issues it is supposed to address are presumably quite rare - unless the prover submits their code at the very last second, which I'd wager most users instinctively avoid anyway.
 
 As we'd suspected, 6-digit TOTPs are indeed troublingly bruteforceable; a ~50% chance of success can be obtained in a matter of hours with even a modest request rate of 20-30 requests per second. And with specialized software like [Turbo Intruder](https://portswigger.net/research/turbo-intruder-embracing-the-billion-request-attack), much higher rates can often be achieved. 
 
