@@ -38,7 +38,9 @@ date: 2025-01-26
 }
 </style>
 
-It is hardly controversial to argue in 2025 that 6-digit time-based one-time passwords (TOTPs) are susceptible to brute-force attacks if not protected by appropriate rate-limiting countermeasures. Thankfully, this seems to be a settled debate, and most implementations do enforce some kind of throttling. I was recently searching for a precise mathematical breakdown of this susceptibility, and I was surprised to find that none seems to exist - only simplified descriptions that do not properly capture the subtleties of TOTPs. This lack of precision bugged me enough to do something about it.
+
+
+It is hardly controversial to argue in 2025 that 6-digit time-based one-time passwords (TOTPs) are susceptible to brute-force attacks if not accompanied by appropriate rate-limiting countermeasures. When I recently found myself searching for a mathematical breakdown of this susceptibility, I was surprised to find that none seems to exist – only simplified descriptions that do not properly capture the subtleties of TOTPs. This lack of precision bugged me enough to do something about it.
 
 What follows is my attempt to fill that gap. In this post, we'll look into the mathematics of TOTP brute-force attacks and develop an accurate description, skipping the shortcuts. Finally, we will take some time to discuss the importance of the various TOTP configuration parameters.
 
@@ -255,9 +257,9 @@ updatePlot();
 
 So what conclusions can we draw from this mathematical venture of ours? 
 
-To my own personal dismay, the time step duration seems to carry very little weight. This unfortunately means that the simplified binomial model employed by other authors is almost indistinguishable from the one we developed in this article. In other words, our careful mathematical analysis turned out to be little more than computationally expensive pedantry. Well, at least now we know.
+To my own personal dismay, the time step duration seems to carry very little weight. This unfortunately means that the simplified binomial model employed by other authors is almost indistinguishable from the one we developed in this article. In other words, our careful analysis turned out to be little more than computationally expensive pedantry. Well, at least now we know.
 
-Unsurprisingly, the grace period parameter $$ \lambda $$ makes quite a significant difference to TOTP bruteforceability. It is my opinion that $$ \lambda $$ should generally be set to $$ 0 $$ in production systems, as it considerably weakens the security of TOTP authentication, and the synchronization issues it is supposed to address are presumably quite rare - unless the prover submits their code at the very last second, which I'd wager most users instinctively avoid anyway.
+Unsurprisingly, the grace period parameter $$ \lambda $$ makes quite a significant difference to TOTP bruteforceability. It is my opinion that $$ \lambda $$ should generally be set to $$ 0 $$ in production systems, as it considerably weakens the security of TOTP authentication, and the synchronization issues it is supposed to address are presumably quite rare – unless the prover submits their code at the very last second, which I'd wager most users instinctively avoid anyway.
 
 As we'd suspected, 6-digit TOTPs are indeed troublingly bruteforceable; a ~50% chance of success can be obtained in a matter of hours with even a modest request rate of 20-30 requests per second. And with specialized software like [Turbo Intruder](https://portswigger.net/research/turbo-intruder-embracing-the-billion-request-attack), much higher rates can often be achieved. 
 
