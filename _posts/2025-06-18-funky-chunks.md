@@ -109,6 +109,8 @@ The HTTP/1.1 standard seems to be riddled with strange features that absolutely 
 
 In this post, we will explore how seemingly innocuous leniencies in the parsing of chunked message bodies, particularly in line terminators, can result in request smuggling vulnerabilities in widely-used servers and proxies. I will share new exploitation techniques and payloads, methods for black-box detection, and a few recent vulnerabilities found in well-known HTTP implementations.
 
+*__Update__: I've posted an addendum with a few additional techniques and considerations that did not<br>make it into this post. You can find the addendum [here](https://w4ke.info/2025/10/29/funky-chunks-2.html).*
+
 ### Chunk extensions: the HTTP feature nobody asked for
 We begin our journey in a strange and largely forgotten corner of the HTTP/1.1 RFC specification, a section that feels unfamiliar even to those of us who spend our days staring at HTTP requests. As you may have guessed from the title, I am referring to [section 7.1.1](https://datatracker.ietf.org/doc/html/rfc9112#name-chunk-extensions) of [RFC 9112](https://datatracker.ietf.org/doc/html/rfc9112), birthplace of the *chunk extension*.
 
@@ -602,7 +604,7 @@ First, a brief reminder: In TERM.EXT and EXT.TERM vulnerabilities, the parsing d
 
 Interpreting newlines as line terminators turned out to be a *very* common flaw in both web servers and proxies. The limiting factor for exploitation is really normalization rendering the attack impossible in most cases. However, I did manage to discover three well-known vulnerable proxies that do not apply any normalization. Vulnerable servers are more common, since they (unlike proxies) cannot protect themselves by normalizing requests.
 
-I've listed my discoveries in the table below. For more information about the resolution of each vulnerability, hover your mouse over the cell elements.
+I've listed my discoveries in the table below. For more information about the resolution of each vulnerability, __hover your mouse over the cell elements__.
 
 <table>
   <thead>
@@ -644,7 +646,7 @@ I've listed my discoveries in the table below. For more information about the re
             <span class="tooltiptext">Fixed in <a href="https://github.com/valyala/fasthttp/pull/1899" target="_blank"><code style="white-space: nowrap">PR #1899</code></a>.</span>
           </span><br>
           <span class="tooltip">
-            3. gunicorn
+            3. Gunicorn
             <span class="tooltiptext">Known issue. Fix pending, see <a href="https://github.com/benoitc/gunicorn/pull/3327" target="_blank"><code style="white-space: nowrap">PR #3327</code></a>.</span>
           </span>
         </td>
@@ -663,11 +665,11 @@ I've listed my discoveries in the table below. For more information about the re
           </span><br>
           <span class="tooltip">
             4. netty
-            <span class="tooltiptext">No response.</span>
+            <span class="tooltiptext">Fixed in <a href="https://github.com/netty/netty/pull/15611" target="_blank"><code style="white-space: nowrap">PR #15611</code></a>.</span>
           </span><br>
           <span class="tooltip">
             5. H2O
-            <span class="tooltiptext">Fix pending, see <a href="https://github.com/h2o/picohttpparser/pull/82" target="_blank"><code style="white-space: nowrap">PR #82</code></a>.</span>
+            <span class="tooltiptext">Fixed in <a href="https://github.com/h2o/picohttpparser/pull/82" target="_blank"><code style="white-space: nowrap">PR #82</code></a>.</span>
           </span><br>
           <span class="tooltip">
             6. Golang net/http
@@ -686,7 +688,7 @@ The payload in the video smuggles a `POST /admin` request with an oversized `Con
 
 
 #### TERM.SPILL and SPILL.TERM vulnerabilities
-For TERM.SPILL and SPILL.TERM vulnerabilities to arise, there must be a discrepancy in the line terminator parsing of the chunk *body*. Additionally, either the server or proxy must accept oversized chunks.
+For TERM.SPILL and SPILL.TERM vulnerabilities to arise, there must be a discrepancy in the line terminator parsing of the chunk body. Additionally, either the server or proxy must accept oversized chunks.
 
 Judging by the results of my own experimentation, TERM.SPILL and SPILL.TERM vulnerabilities are not quite as common as their TERM.EXT and EXT.TERM counterparts. Despite my efforts, I was unable to find a single proxy vulnerable to TERM.SPILL, which therefore remains a completely theoretical vulnerability for now. However, I did discover a few setups vulnerable to the SPILL.TERM variant.
 
