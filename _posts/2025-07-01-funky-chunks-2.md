@@ -110,7 +110,7 @@ After revisiting my own recent article introducing a small family of request smu
 In the interest of brevity, I will not include an introduction here. To understand the context of this article, you will therefore need to read the [original one](https://w4ke.info/2025/06/18/funky-chunks) first.
 
 ### The curious case of the two-byte terminator
-In *Funky chunks: abusing ambiguous chunk line terminators for request smuggling*, we surveyed a series of HTTP/1.1 chunked-body parsing leniencies. One of them, mentioned only briefly, now turns out to be of a different nature than the others – one that enables a new subclass of request smuggling techniques to emerge. We will now engage more deeply with this particular leniency.
+In *Funky chunks: abusing ambiguous chunk line terminators for request smuggling*, we surveyed a series of HTTP/1.1 chunked-body parsing leniencies. One of them, mentioned only briefly, now turns out to be of a different nature than the others – one that gives rise to an entirely new subclass of request smuggling techniques. We will now engage more deeply with this particular leniency.
 
 The leniency in question is the following: *accepting any two bytes as the line terminator of a chunk body*. A parser affected by such a leniency would interpret the highlighted `XX` sequence as a line terminator in the example chunked body below.
 
@@ -263,7 +263,7 @@ The proxy ignores the lone newline following the last chunk, interpreting it as 
 
 
 #### TERM.TRAIL
-As it turns out, the TERM.TRAIL scenario is quite a bit more complicated. Before we deep-dive into why, let's first think about how we may construct an equivalent to the TRAIL.TERM payload above. In doing so, we quickly realize that we cannot *'split'* a request as we usually would, because the *'split'* can only occur on the front-end; we can make the front-end perceive an extra request by placing two ambigious line terminators in the trailer section, but we cannot do the same for the back-end. 
+As it turns out, the TERM.TRAIL scenario is quite a bit more complicated. Before we deep-dive into why, let's first think about how we may construct an equivalent to the TRAIL.TERM payload above. In doing so, we quickly realize that we cannot *'split'* a request as we usually would, because the *'split'* can only occur on the front-end; we can make the front-end perceive an extra request by placing two ambiguous line terminators in the trailer section, but we cannot do the same for the back-end. 
 
 There is a workaround, though: we can use *two* requests. This would perhaps more accurately be described as *'request merging'* rather than *'request splitting'*, because what the front-end perceives as two separate requests is squashed into a single request on the back-end – not the other way around.
 
@@ -312,19 +312,19 @@ Host: localhost<span class="http-line-break">\r\n</span>
 
 </div>
 
-Using our two-request technique, it seems we once again managed to hide a request from the front-end parser. The back-end sees a trailer section where the front-end sees a second request and as a result, the `Content-Length` header is ignored and the body of the second request is interpreted as a separate request on the back-end.
+Using our two-request technique, it seems we yet again have managed to hide a request from the front-end parser. The back-end sees a trailer section where the front-end sees a second request and as a result, the `Content-Length` header is ignored and the body of the second request is interpreted as a separate request on the back-end.
 
 There is one major problem, however. 
 
 #### The early-response problem
 Consider what happens when a proxy receives these two pipelined requests. It will initially only forward what it interprets as the first request, which in turn is interpreted as an incomplete request on the back-end. Consequently, the back-end will not return a response, and the proxy will eventually time out and therefore never forward the second request – the attack fails.
 
-Until recently, I had dismissed TERM.TRAIL as unexploitable due to this inevitable upstream connection timeout. I later discovered that it *is* in fact exploitable against a small subset of web servers like AIOHTTP, Koa, and Actix Web which respond __before receiving the request body__ (unless the body is explicitly read by the application code). Shortly after this realization, James Kettle introduced the concept of an *[early-response gadget](https://portswigger.net/research/http1-must-die#breaking-the-0.cl-deadlock)* in his [2025 HTTP desync research](https://portswigger.net/research/http1-must-die), proving that even servers like nginx and IIS exhibit early-response behavior when rubbed the right way. Now, I can therefore confidently state that TERM.TRAIL *is* exploitable – with the added caveat that an early-response gadget is required.
+Until recently, I had dismissed TERM.TRAIL as unexploitable due to this inevitable upstream connection timeout. I later discovered that it *is* in fact exploitable against a small subset of web servers like AIOHTTP, Koa, and Actix Web, which respond __before receiving the request body__ (unless the body is explicitly read by the application code). Shortly after this realization, James Kettle introduced the concept of an *[early-response gadget](https://portswigger.net/research/http1-must-die#breaking-the-0.cl-deadlock)* in his [2025 HTTP desync research](https://portswigger.net/research/http1-must-die), proving that even servers like nginx and IIS exhibit early-response behavior when rubbed the right way. Now, I can therefore confidently state that TERM.TRAIL *is* exploitable – with the added caveat that an early-response gadget is required.
 
 Although Kettle's work on early-response focused on 0.CL vulnerabilities, the idea is equally applicable to our TERM.TRAIL case; if the back-end responds early, the proxy will forward the second request, allowing the smuggled request to be delivered. It's worth noting that unlike in 0.CL, we do not have to worry about the lengths of any request headers added by the front-end. 
 
 
-### Any more bounties..?
+### Any more bounties...?
 Armed with our newfound knowledge, it is only natural to wonder whether any more bounties or CVEs might be unearthed using these techniques. Unfortunately, the answer appears to be *not really*.
 
 Since the length-based techniques are only exploitable against parsing behaviors that I have already demonstrated to be dangerous, there are unfortunately no more CVEs to be issued. Scanning for these vulnerabilities across a range of bug bounty targets sadly yielded no results, perhaps partly as a result of having reported these vulnerabilities to a dozen projects months ago.
