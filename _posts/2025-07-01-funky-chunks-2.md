@@ -120,7 +120,7 @@ Hello, world!<span class="http-highlight-one-compl" style="padding: 0 0px;">XX</
 <span class="http-line-break">\r\n</span>
 </code></pre>
 
-This is a fairly common leniency, presumably because *only* the sequence `\r\n` is valid in this location, so a lot of parsers simply advance the cursor by two characters, not bothering to confirm that the sequence is in fact a CRLF. This behavior is (or rather, *was*) exhibited by parsers such as [h11](https://github.com/python-hyper/h11), [uHTTPd](https://github.com/openwrt/uhttpd), and even older versions of [llhttp](https://github.com/nodejs/llhttp). 
+This is a fairly common quirk, presumably because *only* the sequence `\r\n` is valid in this location, so a lot of parsers simply advance the cursor by two characters, not bothering to confirm that the sequence is in fact a CRLF. This behavior is (or rather, *was*) exhibited by parsers such as [h11](https://github.com/python-hyper/h11), [uHTTPd](https://github.com/openwrt/uhttpd), and even older versions of [llhttp](https://github.com/nodejs/llhttp). 
 
 Another common leniency in this same location is accepting `\n` as a line terminator, a technically incorrect yet highly prevalent behavior. Perhaps you already see where this is going.
 
@@ -209,11 +209,13 @@ Trailer-Two: value-two<span class="http-line-break">\r\n</span>
 <span class="http-line-break">\r\n</span></span></code></pre>
 </div>
 
-Parsing the trailer section is much like parsing the ordinary HTTP header section, with the exception of one key difference: *a lone newline is __not__ an acceptable line terminator in the chunked trailer section.* As you can imagine, many parsers ignore this difference and interpret a single `\n` as a line terminator anyway, often as a consequence of reusing the header-section parsing logic.
+In parsing the trailer section, I've noticed two common approaches.
 
-Like chunk extensions, chunked trailers are generally ignored; parsers simply consume them with no regard for the contents. As a result, some parsers simply look for the `\r\n\r\n` sequence that marks the end of the trailer section, effectively allowing any byte (including lone `\n` characters) in the section. 
+The first approach is reusing the parsing logic for the header section. From a programming perspective, this is a sensible choice – after all, why implement the same thing twice? Unfortunately, there is a subtle but important difference between the headers and the trailers: *a lone newline is __not__ an acceptable line terminator in the chunked trailer section.* As you might imagine, many parsers ignore this nuance and interpret a single `\n` as a line terminator in the trailer section anyway.
 
-These two observations lead us to a brand-new set of exploitable parsing leniencies: by placing what one parser interprets as two consecutive line terminators in what another parser interprets as the trailer section, we have once again stumbled upon a new flavor of chunk-based request smuggling.
+The second approach is to treat the trailer section much like the chunk extensions: consume it with no regard for its contents. This might seem like odd behavior, but it is a perfectly valid choice; the trailer section is optional metadata and [recipients are allowed to discard it](https://www.rfc-editor.org/rfc/rfc9112.html#section-7.1.2-2:~:text=A%20recipient%20that%20removes%20the%20chunked%20coding%20from%20a%20message%20MAY%20selectively%20retain%20or%20discard%20the%20received%20trailer%20fields.). Parsers employing this approach often look only for the `\r\n\r\n` sequence that marks the end of the trailer section, effectively (and erroneously) allowing any byte – including lone `\n` characters – within the section. 
+
+These observations lead us to a brand-new set of exploitable parsing leniencies: by placing what one parser interprets as two consecutive line terminators in what another parser interprets as the trailer section, we have once again stumbled upon a new flavor of chunk-based request smuggling.
 
 #### TRAIL.TERM
 Consider first the scenario in which the front-end proxy ignores lone `\n` characters in the chunked trailer section, but the back-end web server interprets them as line terminators. In such a scenario, we can smuggle a request past the front-end using the surprisingly simple payload below.
