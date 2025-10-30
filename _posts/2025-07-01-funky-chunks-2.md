@@ -265,7 +265,7 @@ The proxy ignores the lone newline following the last chunk, interpreting it as 
 
 
 #### TERM.TRAIL
-As it turns out, the TERM.TRAIL scenario is quite a bit more complicated. Before we deep-dive into why, let's first think about how we may construct an equivalent to the TRAIL.TERM payload above. In doing so, we quickly realize that we cannot *'split'* a request as we usually would, because the *'split'* can only occur on the front-end; we can make the front-end perceive an extra request by placing two ambiguous line terminators in the trailer section, but we cannot do the same for the back-end. 
+As it turns out, the TERM.TRAIL scenario is quite a bit more complicated. Before we deep-dive into why, let's first think about how we may construct an equivalent to the TRAIL.TERM payload above. In doing so, we quickly realize that we cannot *'split'* a request as we usually would, because the *'split'* can only occur on the front-end; once we add the ambiguous line terminators, the front-end interprets them as the end of the request, and we have no way of splitting the request on the back-end instead.
 
 There is a workaround, though: we can use *two* requests. This would perhaps more accurately be described as *'request merging'* rather than *'request splitting'*, because what the front-end perceives as two separate requests is squashed into a single request on the back-end – not the other way around.
 
