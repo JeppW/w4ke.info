@@ -127,7 +127,7 @@ Another common leniency in this same location is accepting `\n` as a line termin
 #### The vulnerability
 If either of the front-end proxy or the back-end server assumes a two-byte CRLF without checking it, and the other accepts `\n` (or any other one-byte or zero-byte sequence) as a line terminator, __chunk boundaries begin to blur__. To see this, consider what happens when a chunk body with a one-byte line terminator is processed by a parser that carelessly advances two bytes after each chunk body. The parser will inadvertently consume a byte from the subsequent chunk header, corrupting the chunk size. This causes the front-end and back-end parsers to disagree about the size of the next chunk, and this disagreement can be used to achieve – *you guessed it* – HTTP request smuggling.
 
-I count a total of four variants of this new length-based technique:
+I see two variants of this new length-based technique:
 
  - __Front-end overread__: The proxy interprets any two-byte sequence as a line terminator, and the server accepts either some one-byte line terminator (e.g. `\n`) or no line terminator at all.
  - __Back-end overread__: The proxy accepts either some one-byte line terminator (e.g. `\n`) or no line terminator at all, and the server interprets any two-byte sequence as a line terminator.
@@ -135,9 +135,9 @@ I count a total of four variants of this new length-based technique:
 It is worth noting that the parsing leniencies we are exploiting here are not actually any different from the ones described in my original blog post – these are just additional ways of combining leniencies to obtain a request smuggling primitive.
 
 #### Example: 1-byte front-end overread
-To keep things short, we'll only discuss one of these variants in depth. I trust that you, dear reader, will be able to construct an equivalent attack for the other variants, should the need arise.
+To keep things short, we'll discuss only one of these variants in depth. I trust that you, dear reader, will be able to construct an equivalent attack for other variants, should the need arise.
 
-Let us then consider the arguably most plausible of the four scenarios: a front-end accepting `\n` as a line terminator and a back-end accepting any two-byte sequence. 
+Let us then consider the arguably most plausible scenario: a front-end accepting `\n` as a line terminator and a back-end accepting any two-byte sequence. 
 
 <div style="display: flex; gap: 10px;">
 <div style="flex: 1;">
@@ -159,7 +159,7 @@ Transfer-Encoding: chunked<span class="http-line-break">\r\n</span>
 </span><span class="http-line-break">\r\n</span><span class="http-highlight-text"></span>
 </span></code></pre>
 
-<p style="text-align: center; font-weight: bold;">ONE interpretation (proxy)</p>
+<p style="text-align: center; font-weight: bold;">Proxy interpretation</p>
 </div>
 
 <div style="flex: 1;">
@@ -181,7 +181,7 @@ Transfer-Encoding: chunked<span class="http-line-break">\r\n</span>
 </span><span class="http-line-break">\r\n</span><span class="http-highlight-text"></span>
 </span></code></pre>
 
-<p style="text-align: center; font-weight: bold;">TWO interpretation (server)</p>
+<p style="text-align: center; font-weight: bold;">Server interpretation</p>
 </div>
 
 </div>
