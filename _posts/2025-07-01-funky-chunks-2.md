@@ -139,6 +139,7 @@ To keep things short, we'll discuss only one of these variants in depth. I trust
 
 Let us then consider the arguably most plausible scenario: a front-end accepting `\n` as a line terminator and a back-end accepting any two-byte sequence. 
 
+<div style="max-width: 100%; overflow-x: auto;">
 <div style="display: flex; gap: 10px;">
 <div style="flex: 1;">
 
@@ -183,7 +184,7 @@ Transfer-Encoding: chunked<span class="http-line-break">\r\n</span>
 
 <p style="text-align: center; font-weight: bold;">Server interpretation</p>
 </div>
-
+</div>
 </div>
 
 The front-end interprets the `\n` as a line terminator and `50` as the size of the second chunk. On the back-end, the first byte of the second chunk size is consumed by the server, assuming it to be part of the line terminator. This changes the perceived size of the second chunk from `50` to `0`, causing the server to interpret it as the end of the request. What the front-end considers the content of the second chunk is therefore interpreted as a second pipelined request on the back-end. 
@@ -194,7 +195,7 @@ We now move on from chunks and chunk sizes and instead turn our attention to ano
 The trailer section is essentially an optional header section following the last chunk of an HTTP message using chunked encoding. Let's get familiar with the syntax by taking a look at an example.
 
 
-
+<div style="max-width: 100%; overflow-x: auto;">
 <div style="margin: auto; width: 420px;">
 <pre><code>POST /some/path HTTP/1.1<span class="http-line-break">\r\n</span>
 Host: example.com<span class="http-line-break">\r\n</span>
@@ -208,6 +209,7 @@ Transfer-Encoding: chunked<span class="http-line-break">\r\n</span>
 Trailer-Two: value-two<span class="http-line-break">\r\n</span>
 <span class="http-line-break">\r\n</span></span></code></pre>
 </div>
+</div>
 
 In parsing the trailer section, I've noticed two common approaches.
 
@@ -220,6 +222,7 @@ These observations lead us to a brand-new set of exploitable parsing leniencies:
 #### TRAIL.TERM
 Consider first the scenario in which the front-end proxy ignores lone `\n` characters in the chunked trailer section, but the back-end web server interprets them as line terminators. In such a scenario, we can smuggle a request past the front-end using the surprisingly simple payload below.
 
+<div style="max-width: 100%; overflow-x: auto;">
 <div style="display: flex; gap: 10px;">
 <div style="flex: 1;">
 
@@ -256,7 +259,7 @@ Host: localhost<span class="http-line-break">\r\n</span>
 
 <p style="text-align: center; font-weight: bold;">TERM interpretation (server)</p>
 </div>
-
+</div>
 </div>
 
 The proxy ignores the lone newline following the last chunk, interpreting it as part of the trailer section. It perceives the remaining data – which the back-end interprets as a second request – as a chunked trailer section. Conveniently, the last two consecutive CRLF sequences serve both as the termination of the trailer section and the second pipelined request.
@@ -269,6 +272,7 @@ As it turns out, the TERM.TRAIL scenario is quite a bit more complicated. Before
 
 There is a workaround, though: we can use *two* requests. This would perhaps more accurately be described as *'request merging'* rather than *'request splitting'*, because what the front-end perceives as two separate requests is squashed into a single request on the back-end – not the other way around.
 
+<div style="max-width: 100%; overflow-x: auto;">
 <div style="display: flex; gap: 10px;">
 <div style="flex: 1;">
 
@@ -311,7 +315,7 @@ Host: localhost<span class="http-line-break">\r\n</span>
 
 <p style="text-align: center; font-weight: bold;">TRAIL interpretation (server)</p>
 </div>
-
+</div>
 </div>
 
 Using our two-request technique, it seems we yet again have managed to hide a request from the front-end parser. The back-end sees a trailer section where the front-end sees a second request and as a result, the `Content-Length` header is ignored and the body of the second request is interpreted as a separate request on the back-end.
@@ -323,7 +327,7 @@ Consider what happens when a proxy receives these two pipelined requests. It wil
 
 Until recently, I had dismissed TERM.TRAIL as unexploitable due to this inevitable upstream connection timeout. I later discovered that it *is* in fact exploitable against a small subset of web servers like AIOHTTP, Koa, and Actix Web, which respond __before receiving the request body__ (unless the body is explicitly read by the application code). Shortly after this realization, James Kettle introduced the concept of an *[early-response gadget](https://portswigger.net/research/http1-must-die#breaking-the-0.cl-deadlock)* in his [2025 HTTP desync research](https://portswigger.net/research/http1-must-die), proving that even servers like nginx and IIS exhibit early-response behavior when rubbed the right way. Now, I can therefore confidently state that TERM.TRAIL *is* exploitable – with the added caveat that an early-response gadget is required.
 
-Although Kettle's work on early-response focused on 0.CL vulnerabilities, the idea is equally applicable to our TERM.TRAIL case; if the back-end responds early, the proxy will forward the second request, allowing the smuggled request to be delivered. It's worth noting that unlike in 0.CL, we do not have to worry about the lengths of any request headers added by the front-end. 
+Although Kettle's work on early-response focused on 0.CL vulnerabilities, the idea is equally applicable to our TERM.TRAIL case; if the back-end responds early, the proxy will forward the second request, allowing the smuggled request to be delivered. It's worth noting that unlike in 0.CL, here we do not have to worry about the lengths of any request headers added by the front-end.
 
 
 ### Any more bounties...?
