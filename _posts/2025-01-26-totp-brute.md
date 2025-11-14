@@ -3,12 +3,9 @@ title: "On the bruteforceability of time-based one-time passwords"
 date: 2025-01-26
 ---
 
-<script>window.PlotlyConfig = {MathJaxConfig: 'local'}; </script>
-<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.21.0/plotly.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.8.1/nouislider.min.js"></script>
-<script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
-<script src="https://cdn.plot.ly/plotly-latest.min.js" charset="utf-8"></script>
-
+<script defer src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.21.0/plotly.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.8.1/nouislider.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.8.1/nouislider.css"/>
 
 <style>
@@ -37,8 +34,6 @@ date: 2025-01-26
   margin: 0 auto;
 }
 </style>
-
-
 
 It is hardly controversial to argue in 2025 that 6-digit time-based one-time passwords (TOTPs) are susceptible to brute-force attacks if not accompanied by appropriate rate-limiting countermeasures. When I recently found myself searching for a mathematical breakdown of this susceptibility, I was surprised to find that none seems to exist – only simplified descriptions that do not properly capture the subtleties of TOTPs. This lack of precision bugged me enough to do something about it.
 
@@ -94,8 +89,8 @@ So how do we express this improvement mathematically? Instead of considering $$ 
 
 $$
 \begin{aligned}
-Pr(f) &=  Pr(X = 0 \mid N_0) \cdot Pr(X = 0 \mid N_1) \cdots Pr(X = 0 \mid N_{\lambda}) \\
-      &= \prod_{i=0}^{\lambda}{Pr(X = 0 \mid N_i)}
+Pr(f) &=  Pr(X = 0 ; N_0) \cdot Pr(X = 0 ; N_1) \cdots Pr(X = 0 ; N_{\lambda}) \\
+      &= \prod_{i=0}^{\lambda}{Pr(X = 0 ; N_i)}
 \end{aligned}
 $$
 
@@ -115,19 +110,19 @@ Now that we have related the attack duration to the probability of success, let'
 <div id="plot"></div>
 <div id="sliders">
 <div class="slider-container">
-    <div class="slider-label" id="v-label">v: 1.0</div>
+    <div class="slider-label">\(v\) (attempts per second): <span id="v-label">1</span></div>
     <div id="v-slider"></div>
 </div>
 <div class="slider-container">
-    <div class="slider-label" id="L-label">L: 1.0</div>
+    <div class="slider-label">\(L\) (time step duration): <span id="L-label">30</span> seconds</div>
     <div id="L-slider"></div>
 </div>
 <div class="slider-container">
-    <div class="slider-label" id="lambda-label">λ: 1.0</div>
+    <div class="slider-label">\(\lambda\) (grace period parameter): <span id="lambda-label">1</span></div>
     <div id="lambda-slider"></div>
 </div>
 <div class="slider-container">
-    <div class="slider-label" id="D-label">D: 1.0</div>
+    <div class="slider-label">\(D\) (number of digits): <span id="D-label">6</span></div>
     <div id="D-slider"></div>
 </div>
 </div>
@@ -197,62 +192,65 @@ const lambdaSlider = document.getElementById('lambda-slider');
 const DSlider = document.getElementById('D-slider');
 
 function updateLabels() {
-    document.getElementById('v-label').textContent = `v (attempts per second): ${v}`;
-    document.getElementById('L-label').textContent = `L (time step duration): ${L} seconds`;
-    document.getElementById('lambda-label').textContent = `λ (grace period parameter): ${lambda}`;
-    document.getElementById('D-label').textContent = `D (number of digits): ${D}`;
+    document.getElementById('v-label').textContent = `${v}`;
+    document.getElementById('L-label').textContent = `${L}`;
+    document.getElementById('lambda-label').textContent = `${lambda}`;
+    document.getElementById('D-label').textContent = `${D}`;
 }
 
-noUiSlider.create(vSlider, {
-    start: [10],
-    range: { min: 1, max: 100 },
-    step: 1
-});
+document.addEventListener("DOMContentLoaded", () => {
+    noUiSlider.create(vSlider, {
+        start: [10],
+        range: { min: 1, max: 100 },
+        step: 1
+    });
 
-noUiSlider.create(LSlider, {
-    start: [30],
-    range: { min: 10, max: 15*60 },
-    step: 5
-});
+    noUiSlider.create(LSlider, {
+        start: [30],
+        range: { min: 10, max: 15*60 },
+        step: 5
+    });
 
-noUiSlider.create(lambdaSlider, {
-    start: [1],
-    range: { min: 0, max: 8 },
-    step: 1
-});
+    noUiSlider.create(lambdaSlider, {
+        start: [1],
+        range: { min: 0, max: 8 },
+        step: 1
+    });
 
-noUiSlider.create(DSlider, {
-    start: [6],
-    range: { min: 4, max: 8 },
-    step: 1
-});
+    noUiSlider.create(DSlider, {
+        start: [6],
+        range: { min: 4, max: 8 },
+        step: 1
+    });
 
-vSlider.noUiSlider.on('update', function(values) {
-    v = Math.round(values[0]);
+    vSlider.noUiSlider.on('update', function(values) {
+        v = Math.round(values[0]);
+        updateLabels();
+        updatePlot();
+    });
+
+    LSlider.noUiSlider.on('update', function(values) {
+        L = Math.round(values[0]);
+        updateLabels();
+        updatePlot();
+    });
+
+    lambdaSlider.noUiSlider.on('update', function(values) {
+        lambda = Math.round(values[0]);
+        updateLabels();
+        updatePlot();
+    });
+
+    DSlider.noUiSlider.on('update', function(values) {
+        D = Math.round(values[0]);
+        updateLabels();
+        updatePlot();
+    });
+
     updateLabels();
     updatePlot();
 });
 
-LSlider.noUiSlider.on('update', function(values) {
-    L = Math.round(values[0]);
-    updateLabels();
-    updatePlot();
-});
-
-lambdaSlider.noUiSlider.on('update', function(values) {
-    lambda = Math.round(values[0]);
-    updateLabels();
-    updatePlot();
-});
-
-DSlider.noUiSlider.on('update', function(values) {
-    D = Math.round(values[0]);
-    updateLabels();
-    updatePlot();
-});
-
-updateLabels();
-updatePlot();
 </script>
 
 So what conclusions can we draw from this mathematical venture of ours? 
