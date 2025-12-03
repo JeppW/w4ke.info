@@ -109,8 +109,6 @@ The HTTP/1.1 standard seems to be riddled with strange features that absolutely 
 
 In this post, we will explore how seemingly innocuous leniencies in the parsing of chunked message bodies, particularly in line terminators, can result in request smuggling vulnerabilities in widely-used servers and proxies. I will share new exploitation techniques and payloads, methods for black-box detection, and a few recent vulnerabilities found in well-known HTTP implementations.
 
-*__Update__: I've posted an addendum with a few additional techniques and considerations that did not<br>make it into this post. You can find the addendum [here](https://w4ke.info/2025/10/29/funky-chunks-2.html).*
-
 ### Chunk extensions: the HTTP feature nobody asked for
 We begin our journey in a strange and largely forgotten corner of the HTTP/1.1 RFC specification, a section that feels unfamiliar even to those of us who spend our days staring at HTTP requests. As you may have guessed from the title, I am referring to [section 7.1.1](https://datatracker.ietf.org/doc/html/rfc9112#name-chunk-extensions) of [RFC 9112](https://datatracker.ietf.org/doc/html/rfc9112), birthplace of the *chunk extension*.
 
@@ -492,7 +490,7 @@ In each of the example probes above, a proxy with the corresponding parsing flaw
 I've written a scanner script I call [smugchunks](https://github.com/JeppW/smugchunks) for automating these vulnerability discovery techniques. For those interested, its source code is publicly available on GitHub and includes payloads for TERM.SPILL and SPILL.TERM detection as well.
 
 ### Exploitation
-Exploiting chunk parser differentials is really not much different from exploiting any other kind of request smuggling vulnerability; they can used for the same attacks you know and love, such as circumventing front-end security controls and serving malicious responses to unsuspecting live clients. 
+Exploiting chunk parser differentials is really not much different from exploiting any other kind of request smuggling vulnerability; they can be used for the same attacks you know and love, such as circumventing front-end security controls and serving malicious responses to unsuspecting live clients. 
 
 In the interest of empowering readers to apply these techniques in practice, I've included a brief discussion on exploitation with some examples here. If you're already well-versed in request smuggling, you will probably find nothing new in this section – feel free to skip ahead.
 
@@ -718,7 +716,7 @@ The payload in the video smuggles a `POST /admin` request with an oversized `Con
 
 
 #### TERM.SPILL and SPILL.TERM vulnerabilities
-For TERM.SPILL and SPILL.TERM vulnerabilities to arise, there must be a discrepancy in the line terminator parsing of the chunk body. Additionally, either the server or proxy must accept oversized chunks.
+For TERM.SPILL and SPILL.TERM vulnerabilities to arise, there must be a discrepancy in the line terminator parsing of the chunk body. Additionally, either the server or the proxy must accept oversized chunks.
 
 Judging by the results of my own experimentation, TERM.SPILL and SPILL.TERM vulnerabilities are not quite as common as their TERM.EXT and EXT.TERM counterparts. Despite my efforts, I was unable to find a single proxy vulnerable to TERM.SPILL, which therefore remains a completely theoretical vulnerability for now. However, I did discover a few setups vulnerable to the SPILL.TERM variant.
 
