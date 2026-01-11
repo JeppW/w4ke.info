@@ -126,7 +126,7 @@ We begin our journey in a strange and largely forgotten corner of the HTTP/1.1 R
 
 Chunk extensions are an optional feature for HTTP messages using [chunked transfer encoding](https://en.wikipedia.org/wiki/Chunked_transfer_encoding). Before we move on to discuss chunk extensions further, let us first briefly remind ourselves of the syntax of chunked-encoding HTTP messages.
 
-Chunked transfer encoding is signaled by the `Transfer-Encoding: chunked` header. In such messages, the body is divided into *chunks*, each consisting of what we may refer to as a *chunk header* and a *chunk body*, both of which are terminated by a CRLF sequence. The chunk header consists of a hexadecimal number specifying the chunk size, optionally followed by any number of semicolon-separated chunk extensions. The chunk body contains the actual data being delivered, its length indicated by the header. The message ends when a zero-sized chunk is encountered.
+Chunked transfer encoding is signaled by the `Transfer-Encoding: chunked` header. In such messages, the body is divided into *chunks*, each consisting of what we may refer to as a *chunk header* and a *chunk body*, both of which are terminated by a CRLF sequence. The chunk header consists of a hexadecimal number specifying the chunk size, optionally followed by any number of semicolon-separated *chunk extensions*. The chunk body contains the actual data being delivered, its length indicated by the header. The message ends when a zero-sized chunk is encountered.
 
 <div style="max-width: 100%; overflow-x: auto;">
 <div style="margin: auto; width: 420px;">
@@ -161,7 +161,7 @@ func removeChunkExtension(p []byte) ([]byte, error) {
 }
 ```
 
-To an HTTP implementer, the chunk extension is indeed nothing more than a nuisance one has to account for in order to comply with the HTTP standard. However, the RFC is actually quite particular about what characters are allowed in chunk extensions and the syntax rules are not exactly straight-forward. As a result, __most HTTP implementations do not strictly adhere to the chunk extension specification__. And this makes sense – why would they, when they're just "ignoring and stripping them anyway", as one Golang developer put it so aptly?
+To an HTTP implementer, the chunk extension is indeed nothing more than a nuisance one has to account for in order to comply with the HTTP standard. However, the RFC is actually quite particular about what characters are allowed in chunk extensions and the syntax rules are not exactly straightforward. As a result, __most HTTP implementations do not strictly adhere to the chunk extension specification__. And this makes sense – why would they, when they're just "ignoring and stripping them anyway", as one Golang developer put it so aptly?
 
 #### A thought experiment
 Parsers may choose to throw away chunk extensions, but they do still have to parse them. And as we've already established, parsers are inclined to do so somewhat carelessly, since the contents are discarded anyway. This is fertile ground for misinterpretations. Let us explore that further with a simple thought experiment.
@@ -178,18 +178,18 @@ Let's go through these options one by one.
 
 It's easy to see how a parser might come to choose option 1 without the author even realizing it. If it's only looking for the terminating CRLF sequence without any intention of caring about the chunk extension, it will plausibly just throw away the `\n` along with any other byte (legal or otherwise) that might exist between the `;` and `\r\n` sequences. Control characters like newlines are not allowed in chunk extensions, and of course allowing illegal characters is incorrect behavior, so this option is in violation of the RFC.
 
-The second option – interpreting the newline as a line terminator – might at a glance appear valid. After all, [the RFC allows interpreting single LFs as line terminators in the request line and headers](https://datatracker.ietf.org/doc/html/rfc9112#section-2.2-3), so why not the chunk headers? Unfortunately, no such exception exists for the chunk lines; __only the complete CRLF is a valid line terminator in the chunked body__. You might not feel convinced that this is true, and I will grant you that it is a strange complication, especially since it's not even explicitly addressed in the specification. However, [this errata review from 2023](https://www.rfc-editor.org/errata/eid7633) confirms that the difference in allowed line terminators is in fact by design. As such, we conclude that option 2 is also in violation of the RFC.
+The second option – interpreting the newline as a line terminator – might at a glance appear valid. After all, [the RFC allows interpreting lone LFs as line terminators in the request line and headers](https://datatracker.ietf.org/doc/html/rfc9112#section-2.2-3), so why not the chunk headers? Unfortunately, no such exception exists for the chunk lines; __only the complete CRLF is a valid line terminator in the chunked body__. You might not feel convinced that this is true, and I will grant you that it is a strange complication, especially since it's not even explicitly addressed in the specification. However, [this errata review from 2023](https://www.rfc-editor.org/errata/eid7633) confirms that the difference in allowed line terminators is in fact by design. As such, we conclude that option 2 is also in violation of the RFC.
 
 Indeed, the only technically correct course of action is option 3: rejecting the request. 
 
 ### The vulnerability
-Either of the two lenient parsing options are harmless behaviors on their own, but consider an environment with both a front-end reverse proxy (e.g. a load balancer, cache, or WAF) and a back-end web server. If the proxy in such an architecture applies one of the two incorrect interpretations while the server applies the other, we're left with a parsing discrepancy. This discrepancy can be exploited to construct ambiguous HTTP requests, enabling *HTTP request smuggling* attacks.
+Either of the two lenient parsing options is a harmless behavior on its own, but consider an environment with both a front-end reverse proxy (e.g. a load balancer, cache, or WAF) and a back-end web server. If the proxy in such an architecture applies one of the two incorrect interpretations while the server applies the other, we're left with a parsing discrepancy. This discrepancy can be exploited to construct ambiguous HTTP requests, enabling *HTTP request smuggling* attacks.
 
 There are two variants of this type of request smuggling vulnerability. I will refer to these as TERM.EXT and EXT.TERM:
   1. __The terminator-extension (or TERM.EXT) variant__: The proxy interprets a certain sequence in a chunk extension as a line terminator, and the server treats it as part of the chunk extension.
   2. __The extension-terminator (or EXT.TERM) variant__: The server allows a certain sequence in a chunk extension that the proxy interprets as a line terminator.
 
-While the newline character `\n` is perhaps the best example of a sequence that can cause a parsing discrepancy, it is worth noting that these techniques are not limited to `\n`; other potentially ambiguous sequences such as `\rX` and `\r` are equally exploitable, although much more uncommon.
+While the newline character `\n` is perhaps the best example of a sequence that can cause a parsing discrepancy, these techniques are not limited to `\n`; other potentially ambiguous sequences such as `\rX` and `\r` are equally exploitable, although much more uncommon.
 
 An interesting thing to note is that these vulnerabilities fundamentally differ from conventional request smuggling vulnerabilities in that they do not rely on confusion between the `Content-Length` and `Transfer-Encoding` headers. This is good news for attackers, because while [the RFC forbids an intermediary from forwarding both these headers](https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.3), chunk extensions can legally be forwarded. Many intermediaries do remove or normalize them, though.
 
@@ -315,7 +315,7 @@ AAAAA<span class="http-highlight-one-compl" style="padding: 0 0px;">XXX</span><s
 </code></pre>
 </div>
 
-Some HTTP servers and proxies accept such malformed chunks and simply ignore the trailing excess bytes which I will henceforth refer to as the *spill*. By placing a sequence that one parser interprets as a line terminator in what another parser interprets as a spill, we obtain an exploitable parsing discrepancy. This allows us to define a new set of complementary vulnerabilities that to my knowledge has never before been documented.
+Some HTTP servers and proxies accept such malformed chunks and simply ignore the trailing excess bytes which I will henceforth refer to as the *spill*. By placing a sequence that one parser interprets as a line terminator in what another parser interprets as a spill, we obtain an exploitable parsing discrepancy. This allows us to define a new set of complementary parsing vulnerabilities that to my knowledge has never before been documented.
 
 #### TERM.SPILL
 Let us first consider the scenario in which the server accepts oversized chunk bodies. To exploit this leniency, we must then find a sequence that only the proxy recognizes as a line terminator. 
@@ -436,7 +436,7 @@ It is tempting to conclude from the above that a proxy that normalizes the chunk
 
 > be conservative in what you send, be liberal in what you accept
 
-The trouble with this assumption is that a proxy does not know in advance whether any additional proxies will be placed in front of it. It is not uncommon to chain proxies with different purposes in modern architectures. In such environments, a chunk-normalizing proxy with one of the parsing flaws we've discussed could still be exploitable for request smuggling if another proxy further up the chain is affected by the complementary parsing flaw.
+The trouble with this assumption is that a proxy does not know in advance whether any additional proxies will be placed in front of it – it is not uncommon to chain proxies with different purposes in modern architectures. In such environments, a chunk-normalizing proxy with one of the parsing flaws we've discussed could still be exploitable for request smuggling if another downstream proxy is affected by the complementary parsing flaw.
 
 ### Black-box detection
 Vulnerable combinations of servers and proxies can quite easily be identified by analyzing source code, but rarely do we in practice have the luxury of access to such details of our target's systems. To discover these vulnerabilities in the wild, we need generic probes.
@@ -487,7 +487,7 @@ AAAABBBBCCCC<span class="http-line-break">\r\n</span>
 
 In each of the example probes above, a proxy with the corresponding parsing flaw will interpret the first `0\r\n\r\n` sequence as the terminating zero-sized chunk, causing it to drop the part of the request marked in red. A vulnerable server receiving the request without the last part will expect more data to arrive, causing it to hang and eventually time out. This results in an easily identifiable time delay. 
 
-I've written a scanner script I call [smugchunks](https://github.com/JeppW/smugchunks) for automating these vulnerability discovery techniques. For those interested, its source code is publicly available on GitHub and includes payloads for TERM.SPILL and SPILL.TERM detection as well.
+I've written a scanner script I call [smugchunks](https://github.com/JeppW/smugchunks) for automating this vulnerability discovery technique. For those interested, its source code is publicly available on GitHub and includes payloads for TERM.SPILL and SPILL.TERM detection as well.
 
 ### Exploitation
 Exploiting chunk parser differentials is really not much different from exploiting any other kind of request smuggling vulnerability; they can be used for the same attacks you know and love, such as circumventing front-end security controls and serving malicious responses to unsuspecting live clients. 
@@ -630,11 +630,16 @@ Let's take a look at the affected systems.
 #### TERM.EXT and EXT.TERM vulnerabilities
 First, a brief reminder: In TERM.EXT and EXT.TERM vulnerabilities, the parsing discrepancy is introduced by a `\n` (or another sequence) in a chunk extension. Some parsers will interpret this as a line terminator and others will interpret it as part of the chunk extension, both of which are technically incorrect behaviors.
 
-Interpreting newlines as line terminators turned out to be a *very* common flaw in both web servers and proxies. The limiting factor for exploitation is really normalization rendering the attack impossible in most cases. However, I did manage to discover three well-known vulnerable proxies that do not apply any normalization. Vulnerable servers are more common, since they (unlike proxies) cannot protect themselves by normalizing requests.
+Interpreting newlines as line terminators turned out to be a *very* common flaw in both web servers and proxies. The limiting factor for exploitation is really normalization rendering the attack impossible in most cases. However, I did manage to discover three well-known vulnerable proxies that do not apply any line terminator normalization in the chunked body. Vulnerable servers are more common, since they (unlike proxies) cannot protect themselves by normalizing requests.
 
 I've listed my discoveries in the table below. For more information about the resolution of each vulnerability, __hover your mouse over the cell elements__.
 
 <table>
+  <colgroup>
+    <col style="width: 15%">
+    <col style="width: 49%">
+    <col style="width: 41%">
+  </colgroup>
   <thead>
     <tr>
       <th></th>
@@ -657,7 +662,7 @@ I've listed my discoveries in the table below. For more information about the re
       </td>
       <td>
         <span class="tooltip">
-          1. Undisclosed cloud CDN
+          1. Imperva CDN
           <span class="tooltiptext">Awarded a $600 bounty.</span>
         </span>
       </td>
@@ -702,7 +707,7 @@ I've listed my discoveries in the table below. For more information about the re
           <span class="tooltip">
             6. Golang net/http
             <span class="tooltiptext">Assigned CVE-2025-22871 and awarded a $5,000 bounty by the Google VRP.</span>
-          </span><br>
+          </span>
         </td>
     </tr>
   </tbody>
@@ -721,6 +726,11 @@ For TERM.SPILL and SPILL.TERM vulnerabilities to arise, there must be a discrepa
 Judging by the results of my own experimentation, TERM.SPILL and SPILL.TERM vulnerabilities are not quite as common as their TERM.EXT and EXT.TERM counterparts. Despite my efforts, I was unable to find a single proxy vulnerable to TERM.SPILL, which therefore remains a completely theoretical vulnerability for now. However, I did discover a few setups vulnerable to the SPILL.TERM variant.
 
 <table>
+  <colgroup>
+    <col style="width: 15%">
+    <col style="width: 30%">
+    <col style="width: 55%">
+  </colgroup>
   <thead>
     <tr>
       <th></th>
@@ -780,7 +790,7 @@ Judging by the results of my own experimentation, TERM.SPILL and SPILL.TERM vuln
   </tbody>
 </table>
 
-Although categorized together, the parsing flaws in the table above are not exactly identical. Specifically, Ktor interpreted `\r` as a line terminator whereas h11 and uHTTPd accepted any 2-byte sequence. Jetty treated the CRLF as optional, effectively interpreting an empty string as a line terminator. On the proxy side, there was a minor difference as well: pound did not allow `\r` in the spill (unlike the Google Cloud load balancer). This means that pound-Ktor is notably *not* a vulnerable setup. 
+Although categorized together, the parsing flaws in the table above are not exactly identical. Specifically, Ktor interpreted `\r` as a line terminator whereas h11 and uHTTPd accepted any 2-byte sequence. Jetty treated the CRLF as optional, effectively interpreting an empty string as a line terminator. On the proxy side, there is a nuance as well: pound did not allow `\r` in the spill. This means that pound-Ktor is notably *not* a vulnerable setup. 
 
 
 ### Closing thoughts

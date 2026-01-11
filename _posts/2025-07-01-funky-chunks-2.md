@@ -105,12 +105,12 @@ td {
 }
 </style>
 
-After revisiting my own recent article introducing a small family of request smuggling techniques, I realized that I had overlooked a few close relatives. In fact, these are in hindsight almost glaringly obvious omissions! To remedy this oversight, I have put together this short note in which we will finally bring these neglected smuggling techniques into focus and welcome them into the family.
+After revisiting my own recent article introducing a small family of request smuggling techniques, I was struck by the realization that I had not quite drawn the family tree to completion. There are still a few branches left to trace – close relatives that until now have escaped our attention. To remedy this oversight, I have put together this short addendum in which we will finally make the proper introductions and welcome these neglected smuggling techniques into the family.
 
 In the interest of brevity, I will not include an introduction here. To understand the context of this article, you will therefore need to read the [original one](https://w4ke.info/2025/06/18/funky-chunks) first.
 
 ### The curious case of the two-byte terminator
-In *Funky chunks: abusing ambiguous chunk line terminators for request smuggling*, we surveyed a series of HTTP/1.1 chunked-body parsing leniencies. One of them, mentioned only briefly, now turns out to be of a different nature than the others – one that gives rise to an entirely new subclass of request smuggling techniques. We will now engage more deeply with this particular leniency.
+In *Funky chunks: abusing ambiguous chunk line terminators for request smuggling*, we surveyed a series of HTTP/1.1 chunked-body parsing leniencies. One of them, mentioned only briefly, now turns out to be of a fundamentally different nature than the others. In fact, as we will soon see, this particular leniency unlocks an entirely new subclass of chunk-based request smuggling techniques.
 
 The leniency in question is the following: *accepting any two bytes as the line terminator of a chunk body*. A parser affected by such a leniency would interpret the highlighted `XX` sequence as a line terminator in the example chunked body below.
 
@@ -120,12 +120,12 @@ Hello, world!<span class="http-highlight-one-compl" style="padding: 0 0px;">XX</
 <span class="http-line-break">\r\n</span>
 </code></pre>
 
-This is a fairly common quirk, presumably because *only* the sequence `\r\n` is valid in this location, so a lot of parsers simply advance the cursor by two characters, not bothering to confirm that the sequence is in fact a CRLF. This behavior is (or rather, *was*) exhibited by parsers such as [h11](https://github.com/python-hyper/h11), [uHTTPd](https://github.com/openwrt/uhttpd), and even older versions of [llhttp](https://github.com/nodejs/llhttp). 
+This is a fairly common quirk, presumably because *only* the sequence `\r\n` is valid in this location. Many parsers simply skip two bytes, not bothering to confirm that the skipped sequence is in fact a CRLF. This behavior is (or rather, *was*) exhibited by parsers such as [h11](https://github.com/python-hyper/h11), [uHTTPd](https://github.com/openwrt/uhttpd), and even older versions of [llhttp](https://github.com/nodejs/llhttp). 
 
-Another common leniency in this same location is accepting `\n` as a line terminator, a technically incorrect yet highly prevalent behavior. Perhaps you already see where this is going.
+Now, recall another common leniency in chunk body parsing: accepting a lone `\n` as a line terminator, a technically incorrect yet highly prevalent behavior. Perhaps you already see where this is going.
 
 #### The vulnerability
-If either of the front-end proxy or the back-end server assumes a two-byte CRLF without checking it, and the other accepts `\n` (or any other one-byte or zero-byte sequence) as a line terminator, __chunk boundaries begin to blur__. To see this, consider what happens when a chunk body with a one-byte line terminator is processed by a parser that carelessly advances two bytes after each chunk body. The parser will inadvertently consume a byte from the subsequent chunk header, corrupting the chunk size. This causes the front-end and back-end parsers to disagree about the size of the next chunk, and this disagreement can be used to achieve – *you guessed it* – HTTP request smuggling.
+If either the front-end proxy or the back-end server assumes a two-byte CRLF without checking it, and the other accepts `\n` (or any other one-byte or zero-byte sequence) as a line terminator, __chunk boundaries begin to blur__. To see this, consider what happens when a chunk body with a one-byte line terminator is processed by a parser that carelessly advances two bytes after each chunk body. The parser will inadvertently consume a byte from the subsequent chunk header, effectively corrupting the chunk size. This causes the front-end and back-end parsers to disagree on the size of the next chunk, thereby enabling – *you guessed it* – HTTP request smuggling.
 
 I see two variants of this new length-based technique:
 
@@ -213,9 +213,9 @@ Trailer-Two: value-two<span class="http-line-break">\r\n</span>
 
 In parsing the trailer section, I've noticed two common approaches.
 
-The first approach is reusing the parsing logic for the header section. From a programming perspective, this is a sensible choice – after all, why implement the same thing twice? Unfortunately, there is a subtle but important difference between the headers and the trailers: *a lone newline is __not__ an acceptable line terminator in the chunked trailer section.* As you might imagine, many parsers ignore this nuance and interpret a single `\n` as a line terminator in the trailer section anyway.
+The first approach is to reuse the parsing logic for the header section. From a programmer's perspective, this is a sensible choice – surely, one should not implement the same parsing logic twice! Unfortunately, there is a subtle but important difference between the headers and the trailers: *a lone newline is __not__ an acceptable line terminator in the chunked trailer section.* As you may imagine, many parsers ignore this nuance and interpret a single `\n` as a line terminator in the trailer section anyway.
 
-The second approach is to treat the trailer section much like the chunk extensions: consume it with no regard for its contents. This might seem like odd behavior, but it is a perfectly valid choice; the trailer section is optional metadata and [recipients are allowed to discard it](https://www.rfc-editor.org/rfc/rfc9112.html#section-7.1.2-2:~:text=A%20recipient%20that%20removes%20the%20chunked%20coding%20from%20a%20message%20MAY%20selectively%20retain%20or%20discard%20the%20received%20trailer%20fields.). Parsers employing this approach often look only for the `\r\n\r\n` sequence that marks the end of the trailer section, effectively (and erroneously) allowing any byte – including lone `\n` characters – within the section. 
+The second approach is to treat the trailer section much like the chunk extensions: consume it with no regard for its contents. This might seem like odd behavior, but it is a perfectly valid choice; the trailer section is optional metadata and [recipients are allowed to discard it](https://www.rfc-editor.org/rfc/rfc9112.html#section-7.1.2-2:~:text=A%20recipient%20that%20removes%20the%20chunked%20coding%20from%20a%20message%20MAY%20selectively%20retain%20or%20discard%20the%20received%20trailer%20fields.). Parsers employing this approach often look only for the `\r\n\r\n` sequence that marks the end of the trailer section, effectively (and erroneously) allowing any byte – including lone `\n` and `\r` characters – within the section. 
 
 These observations lead us to a brand-new set of exploitable parsing leniencies: by placing what one parser interprets as two consecutive line terminators in what another parser interprets as the trailer section, we have once again stumbled upon a new flavor of chunk-based request smuggling.
 
@@ -268,9 +268,9 @@ The proxy ignores the lone newline following the last chunk, interpreting it as 
 
 
 #### TERM.TRAIL
-As it turns out, the TERM.TRAIL scenario is quite a bit more complicated. Before we deep-dive into why, let's first think about how we may construct an equivalent to the TRAIL.TERM payload above. In doing so, we quickly realize that we cannot *'split'* a request as we usually would, because the *'split'* can only occur on the front-end; once we add the ambiguous line terminators, the front-end interprets them as the end of the request, and we have no way of splitting the request on the back-end instead.
+As it turns out, the TERM.TRAIL scenario is quite a bit more complicated. Before we deep-dive into why, let's first think about how we may construct an equivalent to the TRAIL.TERM payload above. In doing so, we quickly realize that we cannot *'split'* a request as we usually would, because the *'split'* can only occur on the front-end; once we add the ambiguous line terminators, the front-end interprets them as the end of the request. We have no way of splitting the request on the back-end instead.
 
-There is a workaround, though: we can use *two* requests. This would perhaps more accurately be described as *'request merging'* rather than *'request splitting'*, because what the front-end perceives as two separate requests is squashed into a single request on the back-end – not the other way around.
+There is a workaround, though: we can use *two* requests. This would perhaps more accurately be described as *'request joining'* rather than *'request splitting'*, because what the front-end perceives as two separate requests is squashed into a single request on the back-end – not the other way around.
 
 <div style="max-width: 100%; overflow-x: auto;">
 <div style="display: flex; gap: 10px;">
@@ -318,22 +318,22 @@ Host: localhost<span class="http-line-break">\r\n</span>
 </div>
 </div>
 
-Using our two-request technique, it seems we yet again have managed to hide a request from the front-end parser. The back-end sees a trailer section where the front-end sees a second request and as a result, the `Content-Length` header is ignored and the body of the second request is interpreted as a separate request on the back-end.
+Using our two-request technique, it seems we yet again have managed to hide a request from the front-end parser. The back-end sees a trailer section where the front-end sees a second request, and as a result, the `Content-Length` header is ignored and the body of the second request is interpreted as a separate request on the back-end.
 
 There is one major problem, however. 
 
 #### The early-response problem
-Consider what happens when a proxy receives these two pipelined requests. It will initially only forward what it interprets as the first request, which in turn is interpreted as an incomplete request on the back-end. Consequently, the back-end will not return a response, and the proxy will eventually time out and therefore never forward the second request – the attack fails.
+Consider what happens when a proxy receives these two pipelined requests. It will initially only forward what it interprets as the first request, which in turn is interpreted as an incomplete request on the back-end. Since the request is incomplete, the back-end will not return a response, and the proxy will eventually time out and therefore never forward the second request – the attack fails.
 
-Until recently, I had dismissed TERM.TRAIL as unexploitable due to this inevitable upstream connection timeout. I later discovered that it *is* in fact exploitable against a small subset of web servers like AIOHTTP, Koa, and Actix Web, which respond __before receiving the request body__ (unless the body is explicitly read by the application code). Shortly after this realization, James Kettle introduced the concept of an *[early-response gadget](https://portswigger.net/research/http1-must-die#breaking-the-0.cl-deadlock)* in his [2025 HTTP desync research](https://portswigger.net/research/http1-must-die), proving that even servers like nginx and IIS exhibit early-response behavior when rubbed the right way. Now, I can therefore confidently state that TERM.TRAIL *is* exploitable – with the added caveat that an early-response gadget is required.
+Until recently, I had dismissed TERM.TRAIL as unexploitable due to this inevitable upstream connection timeout. I later discovered that it *is* in fact exploitable against a small subset of web servers like AIOHTTP, Koa, and Actix Web, which respond __before receiving the request body__ (unless the body is explicitly read by the application). Shortly after this realization, James Kettle introduced the concept of an *[early-response gadget](https://portswigger.net/research/http1-must-die#breaking-the-0.cl-deadlock)* in his [2025 HTTP desync research](https://portswigger.net/research/http1-must-die), proving that even servers like nginx and IIS exhibit early-response behavior when rubbed the right way. We may therefore conclude that TERM.TRAIL *is* exploitable – with the added caveat that an early-response gadget is required.
 
-Although Kettle's work on early-response focused on 0.CL vulnerabilities, the idea is equally applicable to our TERM.TRAIL case; if the back-end responds early, the proxy will forward the second request, allowing the smuggled request to be delivered. It's worth noting that unlike in 0.CL, here we do not have to worry about the lengths of any request headers added by the front-end.
+Although Kettle's work on early-response focused on 0.CL vulnerabilities, the idea is equally applicable to our TERM.TRAIL case; if the back-end responds early, the proxy will forward the second request, allowing the smuggled request to be delivered. It's worth noting that unlike in 0.CL exploitation, here we do not have to worry about the lengths of any request headers added by the front-end.
 
 
 ### Any more bounties...?
-Armed with our newfound knowledge, it is only natural to wonder whether any more bounties or CVEs might be unearthed using these techniques. Unfortunately, the answer appears to be *not really*.
+Armed with our newfound knowledge, it is only natural to wonder whether any more bounties or CVEs might be unearthed using these techniques. Unfortunately, the yields have been rather underwhelming.
 
-Since the length-based techniques are only exploitable against parsing behaviors that I have already demonstrated to be dangerous, there are unfortunately no more CVEs to be issued. Scanning for these vulnerabilities across a range of bug bounty targets sadly yielded no results, perhaps partly as a result of having reported these vulnerabilities to a dozen projects months ago.
+Since the length-based techniques are only exploitable against parsing behaviors that I have already demonstrated to be dangerous, there are no additional CVEs to be issued. Scanning for these vulnerabilities across a range of bug bounty targets sadly met with little success, perhaps partly as a result of my having reported these vulnerabilities to a dozen projects months ago.
 
 Regarding trailer-based techniques, TRAIL.TERM remains a theoretical vulnerability, as none of the proxies I've tested exhibited the required parsing behavior. I did identify multiple TERM.TRAIL-vulnerable setups, including even a couple of real-world instances in bug bounty targets, but I was unable to find the necessary early-response gadgets in most cases. The only exploitable setup I did find was AIOHTTP behind Akamai, Imperva, or Google Classic Application LB, which has now been [fixed](https://github.com/aio-libs/aiohttp/security/advisories/GHSA-9548-qrrj-x5pj). Google Cloud even awarded a generous $13,337 bounty for the parsing flaw in their load balancer.
 
