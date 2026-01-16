@@ -122,7 +122,7 @@ Hello, world!<span class="http-highlight-one-compl" style="padding: 0 0px;">XX</
 
 This is a fairly common quirk, presumably because *only* the sequence `\r\n` is valid in this location. Many parsers simply skip two bytes, not bothering to confirm that the skipped sequence is in fact a CRLF. This behavior is (or rather, *was*) exhibited by parsers such as [h11](https://github.com/python-hyper/h11), [uHTTPd](https://github.com/openwrt/uhttpd), and even older versions of [llhttp](https://github.com/nodejs/llhttp). 
 
-Now, recall another common leniency in chunk body parsing: accepting a lone `\n` as a line terminator, a technically incorrect yet highly prevalent behavior. Perhaps you already see where this is going.
+Now, recall another common leniency in chunk body parsing: *accepting a lone `\n` as a line terminator*, a technically incorrect yet highly prevalent behavior. Perhaps you already see where this is going.
 
 #### The vulnerability
 If either the front-end proxy or the back-end server assumes a two-byte CRLF without checking it, and the other accepts `\n` (or any other one-byte or zero-byte sequence) as a line terminator, __chunk boundaries begin to blur__. To see this, consider what happens when a chunk body with a one-byte line terminator is processed by a parser that carelessly advances two bytes after each chunk body. The parser will inadvertently consume a byte from the subsequent chunk header, effectively corrupting the chunk size. This causes the front-end and back-end parsers to disagree on the size of the next chunk, thereby enabling – *you guessed it* – HTTP request smuggling.
