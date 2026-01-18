@@ -681,10 +681,6 @@ I've listed my discoveries in the table below. For more information about the re
           <span class="tooltip">
             3. Gunicorn
             <span class="tooltiptext">Known issue. Fix pending, see <a href="https://github.com/benoitc/gunicorn/pull/3327" target="_blank"><code style="white-space: nowrap">PR #3327</code></a>.</span>
-          </span><br>
-          <span class="tooltip">
-            4. Kestrel (found by <a href="https://www.praetorian.com/author/siddhant-kalgutkar/">Siddhant Kalgutkar</a>)
-            <span class="tooltiptext">Assigned CVE-2025-55315.</span>          
           </span>
         </td>
         <td>
@@ -759,10 +755,6 @@ Judging by the results of my own experimentation, TERM.SPILL and SPILL.TERM vuln
         <span class="tooltip">
           2. pound
           <span class="tooltiptext">Fixed in <a href="https://github.com/graygnuorg/pound/pull/43" target="_blank"><code style="white-space: nowrap">PR #43</code></a>.</span>
-        </span><br>
-        <span class="tooltip">
-          3. Akamai CDN (found by <a href="https://x.com/jinonehk">@jinonehk</a>)
-          <span class="tooltiptext">Assigned CVE-2025-66373.</span>
         </span>
       </td>
     </tr>
